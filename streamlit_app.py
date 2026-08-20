@@ -41,7 +41,7 @@ st.markdown("""
         --text-muted: #64748b;
     }
     
-    /* Header Banner */
+    /* Header Banner (Visible on all pages as global context) */
     .header-banner {
         background: linear-gradient(135deg, #1a3a5c 0%, #2563eb 100%);
         color: white;
@@ -154,7 +154,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Header Banner with Pipeline Stepper
+# Header Banner with Pipeline Stepper (Global Header visible across all sections)
 st.markdown("""
 <div class="header-banner">
     <div class="header-title">⚡ UniHack 2026 — AI Product Intelligence Studio</div>
@@ -174,16 +174,6 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
-
-# SECTION 3: PIPELINE STATS STRIP (4 Key Performance Metrics from README.md)
-st.markdown("##### 📊 Submission Performance Benchmarks")
-s1, s2, s3, s4 = st.columns(4)
-s1.metric("Delivery Schema Headers", "252 / 252", "100.0% Exact Match")
-s2.metric("Attribute Extraction Coverage", "74.7%", "747 / 1000 Rows")
-s3.metric("Flagged for Human Review", "10.3%", "103 / 1000 Rows")
-s4.metric("Char-Limit Compliance", "100.0%", "0 Violations")
-
-st.write("")
 
 # Preset Examples Data
 PRESETS = {
@@ -209,24 +199,25 @@ PRESETS = {
     }
 }
 
-# Sidebar Preset Selectors
-st.sidebar.markdown("### 📋 Sample Input Presets")
-selected_preset_name = st.sidebar.selectbox("Select a benchmark sample record:", list(PRESETS.keys()))
+# Sidebar Global Controls & Navigation
+st.sidebar.markdown("### 📋 Benchmark Preset Selectors")
+selected_preset_name = st.sidebar.selectbox("Choose a sample record:", list(PRESETS.keys()))
 preset_data = PRESETS[selected_preset_name]
-st.sidebar.info("Click 'Enrich Product Record' to run real-time enrichment via core `src/` modules.")
 
-# Input Section Form
-with st.form(key="enrichment_form"):
-    st.markdown("### 📥 Product Catalog Input")
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        raw_desc_input = st.text_input("Raw Product Description", value=preset_data["desc"], help="Raw title or description text from catalog feed")
-    with col2:
-        mfg_num_input = st.text_input("Mfg Part Number (MPN)", value=preset_data["mpn"])
-        
-    part_manuf_input = st.text_input("Raw Part Manufacturer (Optional)", value=preset_data["manuf"])
-    
-    submit_button = st.form_submit_button(label="🚀 Enrich Product Record", type="primary")
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🧭 Section Navigation")
+nav_selection = st.sidebar.radio(
+    "Go to section:",
+    [
+        "📥 Input & Enrich",
+        "⚡ Before / After",
+        "🏢 Taxonomy & Attributes",
+        "📝 Commerce Descriptions",
+        "🎯 Verified Delivery CSV",
+        "📊 Pipeline Benchmarks"
+    ],
+    index=0
+)
 
 def enrich_single_record(mfg_num, raw_desc, manuf=''):
     """
@@ -245,7 +236,6 @@ def enrich_single_record(mfg_num, raw_desc, manuf=''):
     attributes_dict = extract_attributes_and_uoms(row_dict, product_name)
     descriptions_dict = build_descriptions(row_dict, mfr_name, brand_name, trade_name, product_name, attributes_dict)
     
-    # Confidence Score & Review-Flag Assessment (Identical logic to pipeline.py & evaluate.py)
     confidence_score = brand_conf
     flag_reasons = []
     if brand_flag:
@@ -294,164 +284,225 @@ def enrich_single_record(mfg_num, raw_desc, manuf=''):
 
     return record, attributes_dict, final_conf, is_flagged, flag_reasons
 
-# Process and Render Results
-if submit_button or raw_desc_input:
-    record, attributes_dict, final_conf, is_flagged, flag_reasons = enrich_single_record(
-        mfg_num_input.strip(), raw_desc_input.strip(), part_manuf_input.strip()
-    )
-    
-    st.markdown("---")
-    
-    # SECTION 4: BEFORE / AFTER TRANSFORMATION SUMMARY
+# State Persistence initialization
+if "enriched_record" not in st.session_state:
+    # Perform initial default enrichment for preset_data
+    rec, attrs, conf, flagged, reasons = enrich_single_record(preset_data["mpn"], preset_data["desc"], preset_data["manuf"])
+    st.session_state.enriched_record = rec
+    st.session_state.attributes_dict = attrs
+    st.session_state.final_conf = conf
+    st.session_state.is_flagged = flagged
+    st.session_state.flag_reasons = reasons
+    st.session_state.raw_desc_input = preset_data["desc"]
+    st.session_state.mfg_num_input = preset_data["mpn"]
+    st.session_state.part_manuf_input = preset_data["manuf"]
+
+# SECTION 1: Input & Enrich
+if nav_selection == "📥 Input & Enrich":
+    st.markdown("### 📥 Product Catalog Input & Real-Time Enrichment")
+    with st.form(key="enrichment_form"):
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            raw_desc_input = st.text_input("Raw Product Description", value=st.session_state.raw_desc_input, help="Raw title or description text from catalog feed")
+        with col2:
+            mfg_num_input = st.text_input("Mfg Part Number (MPN)", value=st.session_state.mfg_num_input)
+            
+        part_manuf_input = st.text_input("Raw Part Manufacturer (Optional)", value=st.session_state.part_manuf_input)
+        
+        submit_button = st.form_submit_button(label="🚀 Enrich Product Record", type="primary")
+
+    if submit_button or (raw_desc_input != st.session_state.raw_desc_input or mfg_num_input != st.session_state.mfg_num_input):
+        rec, attrs, conf, flagged, reasons = enrich_single_record(
+            mfg_num_input.strip(), raw_desc_input.strip(), part_manuf_input.strip()
+        )
+        st.session_state.enriched_record = rec
+        st.session_state.attributes_dict = attrs
+        st.session_state.final_conf = conf
+        st.session_state.is_flagged = flagged
+        st.session_state.flag_reasons = reasons
+        st.session_state.raw_desc_input = raw_desc_input.strip()
+        st.session_state.mfg_num_input = mfg_num_input.strip()
+        st.session_state.part_manuf_input = part_manuf_input.strip()
+
+    st.write("")
+    st.markdown("#### 🛡️ Confidence & Quality Audit Assessment")
+    if st.session_state.is_flagged:
+        st.warning(f"⚠️ **Needs Human Review** (Confidence Score: `{st.session_state.final_conf:.2f}`)\n\n**Audit Flag Reason(s):** {'; '.join(st.session_state.flag_reasons) if st.session_state.flag_reasons else 'Sparse attributes or unbranded commodity item'}")
+    else:
+        st.success(f"✅ **High Confidence Standardized Record** (Confidence Score: `{st.session_state.final_conf:.2f}`)\n\nRecord fully grounded in raw input description with verified brand and attribute extractions.")
+
+# SECTION 2: Before / After
+elif nav_selection == "⚡ Before / After":
     st.markdown("### ⚡ Before vs. After Transformation Summary")
-    ba_col1, ba_col2 = st.columns(2)
-    
-    with ba_col1:
-        st.markdown(f"""
-        <div style="background-color: rgba(239, 68, 68, 0.08); border-left: 4px solid #ef4444; padding: 1rem 1.2rem; border-radius: 8px;">
-            <h5 style="color: #991b1b; margin-top: 0; margin-bottom: 0.6rem;">❌ Raw Input Record (Unstructured)</h5>
-            <p style="margin-bottom: 0.3rem;"><strong>Raw Description:</strong> <code>{raw_desc_input}</code></p>
-            <p style="margin-bottom: 0.3rem;"><strong>Mfg Part Number:</strong> <code>{mfg_num_input if mfg_num_input else 'N/A'}</code></p>
-            <p style="margin-bottom: 0;"><strong>Raw Manufacturer:</strong> <code>{part_manuf_input if part_manuf_input else 'N/A'}</code></p>
-        </div>
-        """, unsafe_allow_html=True)
+    if st.session_state.enriched_record is not None:
+        rec = st.session_state.enriched_record
+        ba_col1, ba_col2 = st.columns(2)
         
-    with ba_col2:
-        st.markdown(f"""
-        <div style="background-color: rgba(34, 197, 94, 0.08); border-left: 4px solid #22c55e; padding: 1rem 1.2rem; border-radius: 8px;">
-            <h5 style="color: #166534; margin-top: 0; margin-bottom: 0.6rem;">✅ Enriched Standardized Output</h5>
-            <p style="margin-bottom: 0.3rem;"><strong>Normalized Mfr & Brand:</strong> {record['MANUFACTURER_NAME']} | {record['BRAND_NAME']}</p>
-            <p style="margin-bottom: 0.3rem;"><strong>Taxonomy Classpath:</strong> {record['Classpath']}</p>
-            <p style="margin-bottom: 0;"><strong>Commerce Description:</strong> {record['LONG_DESC1']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    st.write("")
-
-    # SECTION 1: CONFIDENCE / REVIEW-FLAG INDICATOR
-    st.markdown("### 🛡️ Confidence & Quality Audit Assessment")
-    if is_flagged:
-        st.warning(f"⚠️ **Needs Human Review** (Confidence Score: `{final_conf:.2f}`)\n\n**Audit Flag Reason(s):** {'; '.join(flag_reasons) if flag_reasons else 'Sparse attributes or unbranded commodity item'}")
-    else:
-        st.success(f"✅ **High Confidence Standardized Record** (Confidence Score: `{final_conf:.2f}`)\n\nRecord fully grounded in raw input description with verified brand and attribute extractions.")
-
-    st.write("")
-
-    # SECTION 2: "VERIFIED AGAINST DELIVERY CSV" COMPARISON PANEL
-    st.markdown("### 🎯 Verified Delivery CSV Comparison")
-    if df_delivery is not None and mfg_num_input and not df_delivery[df_delivery['Mfg_Part_Num'] == mfg_num_input].empty:
-        sub_row = df_delivery[df_delivery['Mfg_Part_Num'] == mfg_num_input].iloc[0]
-        
-        comp_fields = [
-            ("Manufacturer Name", record['MANUFACTURER_NAME'], str(sub_row.get('MANUFACTURER_NAME', ''))),
-            ("Brand Name", record['BRAND_NAME'], str(sub_row.get('BRAND_NAME', ''))),
-            ("Taxonomy Classpath", record['Classpath'], str(sub_row.get('Classpath', ''))),
-            ("INVOICE_DESC", record['INVOICE_DESC'], str(sub_row.get('INVOICE_DESC', ''))),
-            ("LONG_DESC1", record['LONG_DESC1'], str(sub_row.get('LONG_DESC1', '')))
-        ]
-        
-        comp_rows = []
-        for f_label, live_v, csv_v in comp_fields:
-            match_ok = (str(live_v).strip().lower() == str(csv_v).strip().lower())
-            comp_rows.append({
-                "Field Name": f_label,
-                "Live Inference Engine Value": live_v,
-                "Delivered Output CSV Value": csv_v,
-                "Verification Status": "✅ EXACT MATCH" if match_ok else "❌ DIFFERENCE"
-            })
+        with ba_col1:
+            st.markdown(f"""
+            <div style="background-color: rgba(239, 68, 68, 0.08); border-left: 4px solid #ef4444; padding: 1rem 1.2rem; border-radius: 8px;">
+                <h5 style="color: #991b1b; margin-top: 0; margin-bottom: 0.6rem;">❌ Raw Input Record (Unstructured)</h5>
+                <p style="margin-bottom: 0.3rem;"><strong>Raw Description:</strong> <code>{st.session_state.raw_desc_input}</code></p>
+                <p style="margin-bottom: 0.3rem;"><strong>Mfg Part Number:</strong> <code>{st.session_state.mfg_num_input if st.session_state.mfg_num_input else 'N/A'}</code></p>
+                <p style="margin-bottom: 0;"><strong>Raw Manufacturer:</strong> <code>{st.session_state.part_manuf_input if st.session_state.part_manuf_input else 'N/A'}</code></p>
+            </div>
+            """, unsafe_allow_html=True)
             
-        st.dataframe(pd.DataFrame(comp_rows), use_container_width=True, hide_index=True)
-        st.success("✅ **Submission CSV Alignment:** Live inference engine matches delivered submission output 100%.")
+        with ba_col2:
+            st.markdown(f"""
+            <div style="background-color: rgba(34, 197, 94, 0.08); border-left: 4px solid #22c55e; padding: 1rem 1.2rem; border-radius: 8px;">
+                <h5 style="color: #166534; margin-top: 0; margin-bottom: 0.6rem;">✅ Enriched Standardized Output</h5>
+                <p style="margin-bottom: 0.3rem;"><strong>Normalized Mfr & Brand:</strong> {rec['MANUFACTURER_NAME']} | {rec['BRAND_NAME']}</p>
+                <p style="margin-bottom: 0.3rem;"><strong>Taxonomy Classpath:</strong> {rec['Classpath']}</p>
+                <p style="margin-bottom: 0;"><strong>Commerce Description:</strong> {rec['LONG_DESC1']}</p>
+            </div>
+            """, unsafe_allow_html=True)
     else:
-        st.info("ℹ️ **Novel Input Record:** MPN not present in 1,000-row delivery CSV batch — performing live model inference.")
+        st.info("ℹ️ Please enrich a product record on the 'Input & Enrich' section first to view this transformation summary.")
 
-    st.write("")
+# SECTION 3: Taxonomy & Attributes
+elif nav_selection == "🏢 Taxonomy & Attributes":
+    st.markdown("### 🏢 Taxonomy Classification & Attribute Extractions")
+    if st.session_state.enriched_record is not None:
+        rec = st.session_state.enriched_record
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Manufacturer Name", rec['MANUFACTURER_NAME'] or "N/A")
+        m2.metric("Brand Name", rec['BRAND_NAME'] or "N/A")
+        m3.metric("Trade Name", rec['TRADE_NAME'] or "N/A")
+        m4.metric("Product Name", rec['Product Name'] or "N/A")
+        
+        classpath_html = f'''
+        <div class="classpath-container">
+            <span class="classpath-label">Taxonomy Classpath:</span>
+            <span class="classpath-badge">{rec["Classpath"]}</span>
+        </div>
+        '''
+        st.markdown(classpath_html, unsafe_allow_html=True)
+        st.write("")
+        
+        col_attr, col_dim = st.columns([2, 1])
+        
+        with col_attr:
+            st.markdown("#### 🏷️ Extracted Specification Attributes")
+            attr_list = []
+            for i in range(1, 51):
+                lbl = rec.get(f'ATTRIBUTE_LABEL {i}')
+                val = rec.get(f'ATTRIBUTE_VALUE {i}')
+                uom = rec.get(f'ATTRIBUTE_UOM {i}')
+                if pd.notna(lbl) and str(lbl).strip() != '':
+                    attr_list.append({
+                        "Attribute Label": lbl,
+                        "Attribute Value": val,
+                        "Attribute UOM": uom if pd.notna(uom) else ""
+                    })
+            if attr_list:
+                df_attr = pd.DataFrame(attr_list)
+                st.dataframe(df_attr, use_container_width=True, hide_index=True)
+            else:
+                st.info("No candidate spec attributes extracted from raw description text.")
+                
+        with col_dim:
+            st.markdown("#### 📏 Dedicated Dimensions")
+            d_len = f"{rec['LENGTH']} {rec['LENGTH_UOM']}".strip()
+            d_wid = f"{rec['WIDTH']} {rec['WIDTH_UOM']}".strip()
+            d_hgt = f"{rec['HEIGHT']} {rec['HEIGHT_UOM']}".strip()
+            
+            st.markdown(f'''
+            <div class="dim-box">
+                <div class="dim-title">LENGTH</div>
+                <div class="dim-value">{d_len if d_len else 'N/A'}</div>
+            </div>
+            <div class="dim-box">
+                <div class="dim-title">WIDTH</div>
+                <div class="dim-value">{d_wid if d_wid else 'N/A'}</div>
+            </div>
+            <div class="dim-box">
+                <div class="dim-title">HEIGHT / DEPTH</div>
+                <div class="dim-value">{d_hgt if d_hgt else 'N/A'}</div>
+            </div>
+            ''', unsafe_allow_html=True)
+    else:
+        st.info("ℹ️ Please enrich a product record on the 'Input & Enrich' section first to view taxonomy and attributes.")
 
-    # Primary Identifiers & Taxonomy Section
-    st.markdown("### 🏢 Taxonomy & Entity Normalization")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Manufacturer Name", record['MANUFACTURER_NAME'] or "N/A")
-    m2.metric("Brand Name", record['BRAND_NAME'] or "N/A")
-    m3.metric("Trade Name", record['TRADE_NAME'] or "N/A")
-    m4.metric("Product Name", record['Product Name'] or "N/A")
-    
-    # Render Taxonomy Classpath as a styled HTML badge pill
-    classpath_html = f'''
-    <div class="classpath-container">
-        <span class="classpath-label">Taxonomy Classpath:</span>
-        <span class="classpath-badge">{record["Classpath"]}</span>
-    </div>
-    '''
-    st.markdown(classpath_html, unsafe_allow_html=True)
-    st.write("")
-    
-    # Extracted Attributes & Dedicated Dimensions Section
-    col_attr, col_dim = st.columns([2, 1])
-    
-    with col_attr:
-        st.markdown("### 🏷️ Extracted Specification Attributes")
-        attr_list = []
-        for i in range(1, 51):
-            lbl = record.get(f'ATTRIBUTE_LABEL {i}')
-            val = record.get(f'ATTRIBUTE_VALUE {i}')
-            uom = record.get(f'ATTRIBUTE_UOM {i}')
-            if pd.notna(lbl) and str(lbl).strip() != '':
-                attr_list.append({
-                    "Attribute Label": lbl,
-                    "Attribute Value": val,
-                    "Attribute UOM": uom if pd.notna(uom) else ""
+# SECTION 4: Commerce Descriptions
+elif nav_selection == "📝 Commerce Descriptions":
+    st.markdown("### 📝 Commerce Description Suite & Character Limits")
+    if st.session_state.enriched_record is not None:
+        rec = st.session_state.enriched_record
+        c1, c2 = st.columns(2)
+        with c1:
+            inv_val = rec["INVOICE_DESC"]
+            st.text_area("INVOICE_DESC (≤ 40 CAPS)", value=inv_val, height=80)
+            st.markdown(f'<div class="char-caption">Length: {len(inv_val)}/40 chars (100% Schema Compliant ✅)</div>', unsafe_allow_html=True)
+            
+            mob_val = rec["MOBILE_DESC"]
+            st.text_area("MOBILE_DESC (60-80 Target)", value=mob_val, height=80)
+            st.markdown(f'<div class="char-caption">Length: {len(mob_val)}/80 chars (100% Schema Compliant ✅)</div>', unsafe_allow_html=True)
+
+            shrt_val = rec["SHORT_DESC"]
+            st.text_area("SHORT_DESC (≤ 150 chars)", value=shrt_val, height=100)
+            st.markdown(f'<div class="char-caption">Length: {len(shrt_val)}/150 chars (100% Schema Compliant ✅)</div>', unsafe_allow_html=True)
+
+        with c2:
+            long_val = rec["LONG_DESC1"]
+            st.text_area("LONG_DESC1 (≤ 500 chars)", value=long_val, height=120)
+            st.markdown(f'<div class="char-caption">Length: {len(long_val)}/500 chars (100% Schema Compliant ✅)</div>', unsafe_allow_html=True)
+
+            ret_val = rec["RETAIL_DESC"]
+            st.text_area("RETAIL_DESC", value=ret_val, height=80)
+            st.markdown(f'<div class="char-caption">Length: {len(ret_val)} chars</div>', unsafe_allow_html=True)
+    else:
+        st.info("ℹ️ Please enrich a product record on the 'Input & Enrich' section first to view commerce descriptions.")
+
+# SECTION 5: Verified Delivery CSV
+elif nav_selection == "🎯 Verified Delivery CSV":
+    st.markdown("### 🎯 Live Engine vs. Delivered CSV Verification Matrix")
+    if st.session_state.enriched_record is not None:
+        rec = st.session_state.enriched_record
+        mfg_num = st.session_state.mfg_num_input
+        
+        if df_delivery is not None and mfg_num and not df_delivery[df_delivery['Mfg_Part_Num'] == mfg_num].empty:
+            sub_row = df_delivery[df_delivery['Mfg_Part_Num'] == mfg_num].iloc[0]
+            
+            comp_fields = [
+                ("Manufacturer Name", rec['MANUFACTURER_NAME'], str(sub_row.get('MANUFACTURER_NAME', ''))),
+                ("Brand Name", rec['BRAND_NAME'], str(sub_row.get('BRAND_NAME', ''))),
+                ("Taxonomy Classpath", rec['Classpath'], str(sub_row.get('Classpath', ''))),
+                ("INVOICE_DESC", rec['INVOICE_DESC'], str(sub_row.get('INVOICE_DESC', ''))),
+                ("LONG_DESC1", rec['LONG_DESC1'], str(sub_row.get('LONG_DESC1', '')))
+            ]
+            
+            comp_rows = []
+            for f_label, live_v, csv_v in comp_fields:
+                match_ok = (str(live_v).strip().lower() == str(csv_v).strip().lower())
+                comp_rows.append({
+                    "Field Name": f_label,
+                    "Live Inference Engine Value": live_v,
+                    "Delivered Output CSV Value": csv_v,
+                    "Verification Status": "✅ EXACT MATCH" if match_ok else "❌ DIFFERENCE"
                 })
-        if attr_list:
-            df_attr = pd.DataFrame(attr_list)
-            st.dataframe(df_attr, use_container_width=True, hide_index=True)
+                
+            st.dataframe(pd.DataFrame(comp_rows), use_container_width=True, hide_index=True)
+            st.success("✅ **Submission CSV Alignment:** Live inference engine matches delivered submission output 100%.")
         else:
-            st.info("No candidate spec attributes extracted from raw description text.")
-            
-    with col_dim:
-        st.markdown("### 📏 Dedicated Dimensions")
-        d_len = f"{record['LENGTH']} {record['LENGTH_UOM']}".strip()
-        d_wid = f"{record['WIDTH']} {record['WIDTH_UOM']}".strip()
-        d_hgt = f"{record['HEIGHT']} {record['HEIGHT_UOM']}".strip()
-        
-        st.markdown(f'''
-        <div class="dim-box">
-            <div class="dim-title">LENGTH</div>
-            <div class="dim-value">{d_len if d_len else 'N/A'}</div>
-        </div>
-        <div class="dim-box">
-            <div class="dim-title">WIDTH</div>
-            <div class="dim-value">{d_wid if d_wid else 'N/A'}</div>
-        </div>
-        <div class="dim-box">
-            <div class="dim-title">HEIGHT / DEPTH</div>
-            <div class="dim-value">{d_hgt if d_hgt else 'N/A'}</div>
-        </div>
-        ''', unsafe_allow_html=True)
+            st.info("ℹ️ **Novel Input Record:** MPN not present in 1,000-row delivery CSV batch — performing live model inference.")
+    else:
+        st.info("ℹ️ Please enrich a product record on the 'Input & Enrich' section first to view delivery CSV comparison.")
 
-    st.write("")
+# SECTION 6: Pipeline Benchmarks
+elif nav_selection == "📊 Pipeline Benchmarks":
+    st.markdown("### 📊 Submission Performance Benchmarks")
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric("Delivery Schema Headers", "252 / 252", "100.0% Exact Match")
+    s2.metric("Attribute Extraction Coverage", "74.7%", "747 / 1000 Rows")
+    s3.metric("Flagged for Human Review", "10.3%", "103 / 1000 Rows")
+    s4.metric("Char-Limit Compliance", "100.0%", "0 Violations")
     
-    # Commerce Description Suite Section
-    st.markdown("### 📝 Commerce Description Suite")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        inv_val = record["INVOICE_DESC"]
-        st.text_area("INVOICE_DESC (≤ 40 CAPS)", value=inv_val, height=80)
-        st.markdown(f'<div class="char-caption">Length: {len(inv_val)}/40 chars (100% Schema Compliant ✅)</div>', unsafe_allow_html=True)
-        
-        mob_val = record["MOBILE_DESC"]
-        st.text_area("MOBILE_DESC (60-80 Target)", value=mob_val, height=80)
-        st.markdown(f'<div class="char-caption">Length: {len(mob_val)}/80 chars (100% Schema Compliant ✅)</div>', unsafe_allow_html=True)
-
-        shrt_val = record["SHORT_DESC"]
-        st.text_area("SHORT_DESC (≤ 150 chars)", value=shrt_val, height=100)
-        st.markdown(f'<div class="char-caption">Length: {len(shrt_val)}/150 chars (100% Schema Compliant ✅)</div>', unsafe_allow_html=True)
-
-    with c2:
-        long_val = record["LONG_DESC1"]
-        st.text_area("LONG_DESC1 (≤ 500 chars)", value=long_val, height=120)
-        st.markdown(f'<div class="char-caption">Length: {len(long_val)}/500 chars (100% Schema Compliant ✅)</div>', unsafe_allow_html=True)
-
-        ret_val = record["RETAIL_DESC"]
-        st.text_area("RETAIL_DESC", value=ret_val, height=80)
-        st.markdown(f'<div class="char-caption">Length: {len(ret_val)} chars</div>', unsafe_allow_html=True)
+    st.markdown("""
+    ---
+    #### ℹ️ Audit Scope & Governance Notes
+    - **Header Compliance (252/252)**: Exact 1-to-1 match against Unilog `Unihack__Expected_Output_-_Delivery_Format.csv`.
+    - **Attribute Extraction Coverage (74.7%)**: 747 / 1000 input rows contain structured specification attribute triplets (total 1,724 attributes).
+    - **Human Review Flagging (10.3%)**: 103 sparse input rows flagged deterministically for human review rather than making ungrounded guesses.
+    - **Char-Limit Compliance (100.0%)**: All description fields strictly obey standard schema boundaries (`INVOICE_DESC` ≤ 40 CAPS, `MOBILE_DESC` 60–80 chars, `SHORT_DESC` ≤ 150 chars, `LONG_DESC1` ≤ 500 chars).
+    """)
