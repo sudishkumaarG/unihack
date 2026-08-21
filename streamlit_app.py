@@ -284,18 +284,23 @@ def enrich_single_record(mfg_num, raw_desc, manuf=''):
 
     return record, attributes_dict, final_conf, is_flagged, flag_reasons
 
-# State Persistence initialization
-if "enriched_record" not in st.session_state:
-    # Perform initial default enrichment for preset_data
-    rec, attrs, conf, flagged, reasons = enrich_single_record(preset_data["mpn"], preset_data["desc"], preset_data["manuf"])
+# Preset Change Detection & State Persistence Initialization
+# Explicitly write new preset values into st.session_state BEFORE input widgets are created
+if "last_preset" not in st.session_state or st.session_state["last_preset"] != selected_preset_name:
+    st.session_state["last_preset"] = selected_preset_name
+    st.session_state["raw_desc_input"] = preset_data["desc"]
+    st.session_state["mfg_num_input"] = preset_data["mpn"]
+    st.session_state["part_manuf_input"] = preset_data["manuf"]
+    
+    # Automatically enrich the new preset so all sections update immediately
+    rec, attrs, conf, flagged, reasons = enrich_single_record(
+        preset_data["mpn"], preset_data["desc"], preset_data["manuf"]
+    )
     st.session_state.enriched_record = rec
     st.session_state.attributes_dict = attrs
     st.session_state.final_conf = conf
     st.session_state.is_flagged = flagged
     st.session_state.flag_reasons = reasons
-    st.session_state.raw_desc_input = preset_data["desc"]
-    st.session_state.mfg_num_input = preset_data["mpn"]
-    st.session_state.part_manuf_input = preset_data["manuf"]
 
 # SECTION 1: Input & Enrich
 if nav_selection == "📥 Input & Enrich":
@@ -311,7 +316,7 @@ if nav_selection == "📥 Input & Enrich":
         
         submit_button = st.form_submit_button(label="🚀 Enrich Product Record", type="primary")
 
-    if submit_button or (raw_desc_input != st.session_state.raw_desc_input or mfg_num_input != st.session_state.mfg_num_input):
+    if submit_button:
         rec, attrs, conf, flagged, reasons = enrich_single_record(
             mfg_num_input.strip(), raw_desc_input.strip(), part_manuf_input.strip()
         )
